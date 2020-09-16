@@ -37,11 +37,16 @@ class Video_Stabilizer():
 
         good_coords, good_next_coords = self.get_optical_flow(coords)
         self.draw_tracks(good_coords, good_next_coords)
+        if good_coords.shape[0] < 3:
+            return self.previous_frame_rgb
 
         H, _ = cv2.estimateAffine2D(good_coords, good_next_coords)
 
         H = np.float32(H)
 
+        if H is None: 
+            return self.previous_frame_rgb
+            
         warped_image = cv2.warpAffine(self.previous_frame_rgb, H, (self.previous_frame.shape[1], self.previous_frame.shape[0]))
         #H = self.homography_estimation()
         #H = self.frame_orbit_generating()
