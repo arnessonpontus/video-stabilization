@@ -26,8 +26,8 @@ class Video_Stabilizer():
         self.previous_frame = cv2.cvtColor(previous_frame.astype(np.uint8), cv2.COLOR_BGR2GRAY)
 
     def stabilize(self):
-        H = self.motion_estimation(self.previous_frame, self.current_frame)
-        return self.previous_frame_rgb # Temp
+        stabilized_image = self.motion_estimation(self.previous_frame, self.current_frame)
+        return stabilized_image
 
     def motion_estimation(self, previous_frame, current_frame):
         coords = cv2.goodFeaturesToTrack(previous_frame, mask = None, **FEATURE_PARAMS)
@@ -37,9 +37,15 @@ class Video_Stabilizer():
 
         good_coords, good_next_coords = self.get_optical_flow(coords)
         self.draw_tracks(good_coords, good_next_coords)
+
+        H, _ = cv2.estimateAffine2D(good_coords, good_next_coords)
+
+        H = np.float32(H)
+
+        warped_image = cv2.warpAffine(self.previous_frame_rgb, H, (self.previous_frame.shape[1], self.previous_frame.shape[0]))
         #H = self.homography_estimation()
         #H = self.frame_orbit_generating()
-        return 
+        return warped_image
 
     # FOR DEBUG PURPOSES
     def draw_tracks(self, coords, next_coords, drawing_type="draw_tracks"):
