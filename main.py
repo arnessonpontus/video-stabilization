@@ -11,6 +11,7 @@ if not cap.isOpened():
 
 previous_frame = np.zeros((720, 1280, 3))
 stabilizer = Video_Stabilizer()
+counter = 0
 
 while True:
     _, current_frame = cap.read()
@@ -27,13 +28,17 @@ while True:
     # plt.show()
     ###
 
-    cv2.imshow('Input', stabilized_frame)
+    if stabilized_frame is not None:
+        cv2.imshow('Input', stabilized_frame)
 
     previous_frame = current_frame
 
     c = cv2.waitKey(1)
     if c == 27:
         break
+    
+    #print('frame: ', counter)
+    #counter = counter+1
 
 cap.release()
 cv2.destroyAllWindows()
