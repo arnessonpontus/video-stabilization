@@ -18,6 +18,8 @@ class Video_Stabilizer():
         self.previous_frame_rgb = np.zeros((720, 1280, 3))
         self.current_frame = np.zeros((720, 1280))
         self.previous_frame = np.zeros((720, 1280))
+        self.H_cummulative = np.ones((2, 3))
+        #self.kalman = cv2.KalmanFilter()
 
     def add_frames(self, previous_frame, current_frame):
         self.current_frame_rgb = current_frame
@@ -26,31 +28,61 @@ class Video_Stabilizer():
         self.previous_frame = cv2.cvtColor(previous_frame.astype(np.uint8), cv2.COLOR_BGR2GRAY)
 
     def stabilize(self):
-        stabilized_image = self.motion_estimation(self.previous_frame, self.current_frame)
+        H = self.motion_estimation(self.previous_frame, self.current_frame)
+        if H is None: 
+            return self.previous_frame_rgb
+
+
+        self.H_cummulative = self.H_cummulative * H
+
+        # Motion filtering
+        H_smoothed = self.get_motion_filter()
+
+        # Inverse of H
+        H = np.concatenate((self.H_cummulative, np.array([[0, 0, 1]])))
+        H = np.linalg.inv(H)
+        H = np.delete(H, 2, 0)
+
+        # Smoothed transformation
+        # A_smoothed = M_smoothed . (M_cummulative)^-1 . A_current from article
+        H_res = H
+    
+        # Warp through affine matrix
+        stabilized_image = cv2.warpAffine(self.previous_frame_rgb, H_res, (self.previous_frame.shape[1], self.previous_frame.shape[0]))
         return stabilized_image
 
     def motion_estimation(self, previous_frame, current_frame):
         coords = cv2.goodFeaturesToTrack(previous_frame, mask = None, **FEATURE_PARAMS)
 
         if coords is None:
-            return
+            return None
 
         good_coords, good_next_coords = self.get_optical_flow(coords)
         self.draw_tracks(good_coords, good_next_coords)
         if good_coords.shape[0] < 3:
-            return self.previous_frame_rgb
+            return None
 
+        # Get Affine Transformation
         H, _ = cv2.estimateAffine2D(good_coords, good_next_coords)
 
-        H = np.float32(H)
+        #good_coords = np.float32(good_coords)
+        #good_next_coords = np.float32(good_next_coords)
 
-        if H is None: 
-            return self.previous_frame_rgb
-            
-        warped_image = cv2.warpAffine(self.previous_frame_rgb, H, (self.previous_frame.shape[1], self.previous_frame.shape[0]))
+        # Get Homography (4-points)
+        #good_coords = np.float32(good_coords)
+        #good_next_coords = np.float32(good_next_coords)
+        #H = cv2.getPerspectiveTransform(good_coords, good_next_coords)
+
+        #warped_image = np.dot(np.linalg.inv(H), self.previous_frame)
+
+        # Warp through homography matrix
+        #warped_image = cv2.warpPerspective(self.previous_frame_rgb, H, (self.previous_frame.shape[1], self.previous_frame.shape[0]))
+        
         #H = self.homography_estimation()
         #H = self.frame_orbit_generating()
-        return warped_image
+
+        # Return transformation matrix
+        return H
 
     # FOR DEBUG PURPOSES
     def draw_tracks(self, coords, next_coords, drawing_type="draw_tracks"):
@@ -74,6 +106,11 @@ class Video_Stabilizer():
         good_next_coords = next_coords[status==1]
         good_old_coords = coords[status==1]
         return good_old_coords, good_next_coords
+    
+    
+    def get_motion_filter(self):
+
+        return None
     
     def homography_estimation(self):
         pass
