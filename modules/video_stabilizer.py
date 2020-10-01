@@ -19,6 +19,8 @@ class Video_Stabilizer():
         self.current_frame = np.zeros((height, width))
         self.previous_frame = np.zeros((height, width))
         self.H_cummulative = np.ones((2, 3))
+        self.height = height
+        self.width = width
 
     def add_frames(self, previous_frame, current_frame):
         self.current_frame_rgb = current_frame
@@ -46,7 +48,7 @@ class Video_Stabilizer():
         H_res = H
     
         # Warp through affine matrix
-        stabilized_image = cv2.warpAffine(self.previous_frame_rgb, H_res, (self.height, self.width))
+        stabilized_image = cv2.warpAffine(self.previous_frame_rgb, H_res, (self.width, self.height))
         return stabilized_image
 
     def motion_estimation(self, previous_frame, current_frame):
@@ -75,22 +77,22 @@ class Video_Stabilizer():
 
         # Warp through homography matrix
         #warped_image = cv2.warpPerspective(self.previous_frame_rgb, H, (self.previous_frame.shape[1], self.previous_frame.shape[0]))
-
+        
         # Return transformation matrix
         return H
 
     # FOR DEBUG PURPOSES
-    def draw_tracks(self, coords, next_coords, drawing_type=True):
+    def draw_tracks(self, coords, next_coords, draw_lines=True):
         mask = np.zeros_like(self.previous_frame)
         
         # FOR DEBUG PURPOSES
         color = np.random.randint(0,255,(100,3))
-        
+
         for i,(new,old) in enumerate(zip(next_coords, coords)):
-            a, b = new.ravel() 
+            a, b = new.ravel()
             c, d = old.ravel()
             cv2.circle(self.previous_frame_rgb,(a,b),5,color[i].tolist(),-1)
-            if drawing_type:
+            if draw_lines:
                 cv2.line(self.previous_frame_rgb, (a,b),(c,d), color[i].tolist(), 2)
 
     def get_optical_flow(self, coords):
@@ -105,5 +107,5 @@ class Video_Stabilizer():
     def get_motion_filter(self):
         # KALMAN
         return None
-
+    
     
