@@ -13,13 +13,12 @@ LK_PARAMS = dict( winSize  = (15,15),
                   criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 
 class Video_Stabilizer():
-    def __init__(self):
-        self.current_frame_rgb = np.zeros((720, 1280, 3)) # Change to camera dependent size?
-        self.previous_frame_rgb = np.zeros((720, 1280, 3))
-        self.current_frame = np.zeros((720, 1280))
-        self.previous_frame = np.zeros((720, 1280))
+    def __init__(self, height, width):
+        self.current_frame_rgb = np.zeros((height, width, 3)) # Change to camera dependent size?
+        self.previous_frame_rgb = np.zeros((height, width, 3))
+        self.current_frame = np.zeros((height, width))
+        self.previous_frame = np.zeros((height, width))
         self.H_cummulative = np.ones((2, 3))
-        #self.kalman = cv2.KalmanFilter()
 
     def add_frames(self, previous_frame, current_frame):
         self.current_frame_rgb = current_frame
@@ -32,8 +31,7 @@ class Video_Stabilizer():
         if H is None: 
             return self.previous_frame_rgb
 
-
-        self.H_cummulative = H #self.H_cummulative * H
+        self.H_cummulative = H
 
         # Motion filtering
         #H_smoothed = self.get_motion_filter()
@@ -48,7 +46,7 @@ class Video_Stabilizer():
         H_res = H
     
         # Warp through affine matrix
-        stabilized_image = cv2.warpAffine(self.previous_frame_rgb, H_res, (self.previous_frame.shape[1], self.previous_frame.shape[0]))
+        stabilized_image = cv2.warpAffine(self.previous_frame_rgb, H_res, (self.height, self.width))
         return stabilized_image
 
     def motion_estimation(self, previous_frame, current_frame):
@@ -77,25 +75,22 @@ class Video_Stabilizer():
 
         # Warp through homography matrix
         #warped_image = cv2.warpPerspective(self.previous_frame_rgb, H, (self.previous_frame.shape[1], self.previous_frame.shape[0]))
-        
-        #H = self.homography_estimation()
-        #H = self.frame_orbit_generating()
 
         # Return transformation matrix
         return H
 
     # FOR DEBUG PURPOSES
-    def draw_tracks(self, coords, next_coords, drawing_type="draw_tracks"):
+    def draw_tracks(self, coords, next_coords, drawing_type=True):
         mask = np.zeros_like(self.previous_frame)
         
         # FOR DEBUG PURPOSES
         color = np.random.randint(0,255,(100,3))
-
+        
         for i,(new,old) in enumerate(zip(next_coords, coords)):
-            a, b = new.ravel()
+            a, b = new.ravel() 
             c, d = old.ravel()
             cv2.circle(self.previous_frame_rgb,(a,b),5,color[i].tolist(),-1)
-            if drawing_type == 'draw_tracks':
+            if drawing_type:
                 cv2.line(self.previous_frame_rgb, (a,b),(c,d), color[i].tolist(), 2)
 
     def get_optical_flow(self, coords):
@@ -107,15 +102,8 @@ class Video_Stabilizer():
         good_old_coords = coords[status==1]
         return good_old_coords, good_next_coords
     
-    
     def get_motion_filter(self):
-
+        # KALMAN
         return None
-    
-    def homography_estimation(self):
-        pass
-
-    def frame_orbit_generating(self):
-        pass
 
     
