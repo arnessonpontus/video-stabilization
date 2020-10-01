@@ -33,10 +33,10 @@ class Video_Stabilizer():
             return self.previous_frame_rgb
 
 
-        self.H_cummulative = self.H_cummulative * H
+        self.H_cummulative = H #self.H_cummulative * H
 
         # Motion filtering
-        H_smoothed = self.get_motion_filter()
+        #H_smoothed = self.get_motion_filter()
 
         # Inverse of H
         H = np.concatenate((self.H_cummulative, np.array([[0, 0, 1]])))
