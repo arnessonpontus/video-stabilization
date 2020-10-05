@@ -32,8 +32,8 @@ if __name__ == "__main__":
     counter = 0
 
     # For saving video
-    #fourcc = cv2.VideoWriter_fourcc(*'FMP4')
-    #out = cv2.VideoWriter('video_out.mp4', fourcc, 24, (WIDTH, HEIGHT))
+    fourcc = cv2.VideoWriter_fourcc(*'FMP4')
+    out = cv2.VideoWriter('video_out.mp4', fourcc, 24.0, (WIDTH,HEIGHT))
 
 while True:
     _, current_frame = cap.read()
@@ -52,7 +52,7 @@ while True:
         if(frame_out.shape[1] is not 1920):
             frame_out = cv2.resize(frame_out, (frame_out.shape[1]//2, frame_out.shape[0]//2))
             cv2.imshow("Before and After", frame_out)
-            #out.write(frame_out)
+            out.write(stabilized_frame)
             cv2.waitKey(10)
 
     previous_frame = current_frame
@@ -62,6 +62,6 @@ while True:
         break
     
 cap.release()
-#out.release()
+out.release()
 cv2.destroyAllWindows()
 
