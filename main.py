@@ -32,8 +32,8 @@ if __name__ == "__main__":
     counter = 0
 
     # For saving video
-    #fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-    #out = cv2.VideoWriter('video_out.avi', fourcc, 24, (WIDTH, HEIGHT))
+    #fourcc = cv2.VideoWriter_fourcc(*'FMP4')
+    #out = cv2.VideoWriter('video_out.mp4', fourcc, 24, (WIDTH, HEIGHT))
 
 while True:
     _, current_frame = cap.read()
@@ -61,9 +61,7 @@ while True:
     if c == 27:
         break
     
-    #print('frame: ', counter)
-    #counter = counter+1
-
 cap.release()
+#out.release()
 cv2.destroyAllWindows()
 

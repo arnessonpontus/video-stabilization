@@ -18,9 +18,25 @@ class Video_Stabilizer():
         self.previous_frame_rgb = np.zeros((height, width, 3))
         self.current_frame = np.zeros((height, width))
         self.previous_frame = np.zeros((height, width))
-        self.H_cummulative = np.ones((2, 3))
         self.height = height
         self.width = width
+        self.H_last = np.ones((2, 3)) # Previous transform in case current frame does not have one
+        self.frame_counter = 0
+        # -------------- Accumulated frame-to-frame transforms ----------
+        self.x = 0  
+        self.y = 0  
+        self.a = 0
+        #  ------------- Kalman parameters ---------------
+        self.X = np.zeros((1,3)) # Initialize estimate to 0
+        self.X_ = np.zeros((1,3))
+        self.P = np.ones((1,3)) # Initialize error variance to 1
+        self.P_ = np.zeros((1,3))
+        self.K = np.zeros((1,3))
+        self.pstd = 4e-3
+        self.cstd = 0.25
+        self.z = 0
+        self.Q = np.array((self.pstd, self.pstd, self.pstd))
+        self.R = np.array((self.cstd, self.cstd, self.cstd))
 
     def add_frames(self, previous_frame, current_frame):
         self.current_frame_rgb = current_frame
@@ -30,25 +46,24 @@ class Video_Stabilizer():
 
     def stabilize(self):
         H = self.motion_estimation(self.previous_frame, self.current_frame)
+        
         if H is None: 
-            return self.previous_frame_rgb
-
-        self.H_cummulative = H
-
+            H = self.H_last
+        
+        self.H_last = H
+        
         # Motion filtering
-        #H_smoothed = self.get_motion_filter()
-
+        H = self.motion_filter(H)
+        
         # Inverse of H
-        H = np.concatenate((self.H_cummulative, np.array([[0, 0, 1]])))
-        H = np.linalg.inv(H)
-        H = np.delete(H, 2, 0)
-
-        # Smoothed transformation
-        # A_smoothed = M_smoothed . (M_cummulative)^-1 . A_current from article
-        H_res = H
+        # H = np.concatenate((self.H_cummulative, np.array([[0, 0, 1]])))
+        # H = np.linalg.inv(H)
+        # H = np.delete(H, 2, 0)
     
         # Warp through affine matrix
-        stabilized_image = cv2.warpAffine(self.previous_frame_rgb, H_res, (self.width, self.height))
+        stabilized_image = cv2.warpAffine(self.previous_frame_rgb, H, (self.width, self.height))
+        
+        self.frame_counter += 1
         return stabilized_image
 
     def motion_estimation(self, previous_frame, current_frame):
@@ -63,22 +78,8 @@ class Video_Stabilizer():
             return None
 
         # Get Affine Transformation
-        H, _ = cv2.estimateAffine2D(good_coords, good_next_coords)
+        H, _ = cv2.estimateAffinePartial2D(good_coords, good_next_coords)
 
-        #good_coords = np.float32(good_coords)
-        #good_next_coords = np.float32(good_next_coords)
-
-        # Get Homography (4-points)
-        #good_coords = np.float32(good_coords)
-        #good_next_coords = np.float32(good_next_coords)
-        #H = cv2.getPerspectiveTransform(good_coords, good_next_coords)
-
-        #warped_image = np.dot(np.linalg.inv(H), self.previous_frame)
-
-        # Warp through homography matrix
-        #warped_image = cv2.warpPerspective(self.previous_frame_rgb, H, (self.previous_frame.shape[1], self.previous_frame.shape[0]))
-        
-        # Return transformation matrix
         return H
 
     # FOR DEBUG PURPOSES
@@ -104,8 +105,49 @@ class Video_Stabilizer():
         good_old_coords = coords[status==1]
         return good_old_coords, good_next_coords
     
-    def get_motion_filter(self):
-        # KALMAN
-        return None
+    def motion_filter(self, H):
+        dx = H[0, 2]
+        dy = H[1 ,2]
+        da = np.arctan2(H[1,0], H[0,0])
+
+        # Accumulate frame to frame transformation
+        self.x += dx
+        self.y += dy
+        self.a += da
+
+        self.z = np.array((self.x, self.y, self.a))
+
+        if self.frame_counter > 0:
+
+            #  -------------  KALMAN  -----------------
+            # Prediction
+            self.X_ = self.X
+            self.P_ = self.P + self.Q
+
+            # Correction 
+            self.K = self.P_ / (self.P_ + self.R)
+            self.X = self.X_ + self.K * (self.z - self.X_)
+            self.P = (np.ones((1,3)) - self.K) * self.P_
+            # ------------------------------------------
+        
+        # corrected tranform - accumulated transform
+        diff_x = self.X[0,0] - self.x
+        diff_y = self.X[0,1] - self.y
+        diff_a = self.X[0,2] - self.a
+
+        dx += diff_x
+        dy += diff_y
+        da += diff_a
+
+        # Construct new transform
+        H[0,0] = np.cos(da)
+        H[0,1] = -np.sin(da)
+        H[1,0] = np.sin(da)
+        H[1,1] = np.cos(da)
+
+        H[0,2] = dx
+        H[1,2] = dy
+        
+        return H
     
     
