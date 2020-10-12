@@ -19,7 +19,7 @@ if __name__ == "__main__":
             
     else: # From webcam
         print("Reading from webcam")
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(1)
         # Check if the webcam is opened correctly
         if not cap.isOpened():
             raise IOError("Cannot open webcam")

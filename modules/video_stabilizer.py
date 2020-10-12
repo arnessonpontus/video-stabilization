@@ -2,8 +2,8 @@ import numpy as np
 import cv2
 
 # params for ShiTomasi corner detection
-FEATURE_PARAMS = dict( maxCorners=100,
-                       qualityLevel=0.3,
+FEATURE_PARAMS = dict( maxCorners=200,
+                       qualityLevel=0.1,
                        minDistance=4,
                        blockSize = 7 )
 
@@ -18,6 +18,7 @@ class Video_Stabilizer():
         self.previous_frame_rgb = np.zeros((height, width, 3))
         self.current_frame = np.zeros((height, width))
         self.previous_frame = np.zeros((height, width))
+        self.neighbouring_frames= np.zeros((height, width, 3, 2))
         self.height = height
         self.width = width
         self.H_last = np.ones((2, 3)) # Previous transform in case current frame does not have one
@@ -47,9 +48,22 @@ class Video_Stabilizer():
     def stabilize(self):
         H = self.motion_estimation(self.previous_frame, self.current_frame)
         
+
         if H is None: 
             H = self.H_last
-        
+
+       
+        '''
+        dx = H[0, 2]
+        dy = H[1 ,2]
+        da = np.arctan2(H[1,0], H[0,0])
+
+        if np.abs(da) > 0.5:
+            H = self.H_last
+
+        print(dx, dy, da)
+        '''
+
         self.H_last = H
         
         # Motion filtering
@@ -59,10 +73,40 @@ class Video_Stabilizer():
         # H = np.concatenate((self.H_cummulative, np.array([[0, 0, 1]])))
         # H = np.linalg.inv(H)
         # H = np.delete(H, 2, 0)
-    
+
+
         # Warp through affine matrix
         stabilized_image = cv2.warpAffine(self.previous_frame_rgb, H, (self.width, self.height))
-        
+
+        self.neighbouring_frames = np.concatenate((stabilized_image[:,:,:,np.newaxis], self.neighbouring_frames[:,:,:,0:-1]), axis=3)
+
+        image_mask = np.ones((self.height, self.width)).astype('uint8')*255
+        if self.frame_counter > 2:
+            image_mask = cv2.warpAffine(image_mask, H, (self.width, self.height))
+            image_mask = cv2.bitwise_not(image_mask)
+            Ht = self.motion_estimation(self.neighbouring_frames[:,:,:,1], stabilized_image)
+            #for i in range(3):
+                #w = np.exp(1-(3-i))
+            
+            # TODO:
+            # Create index array where mask is white [[x, y, z=1], ...]
+            # Multiply with transform matrix from frame t-2 -> t => new index values
+            # Get new index values
+            # Create image with corresponding intensity for indeces
+            # Repeat for 
+
+            
+    
+        #inpaint test
+        #stabilized_image_inpainted = cv2.inpaint(self.previous_frame_rgb.astype('uint8')*255, stabilized_image_mask, 5, cv2.INPAINT_TELEA)
+        #stabilized_image_inpainted = cv2.bitwise_not(stabilized_image_inpainted)
+        '''
+        test = np.zeros((self.height, self.width, 3))
+        test[:,:,0] = stabilized_image_mask
+        test[:,:,1] = stabilized_image_mask
+        test[:,:,2] = stabilized_image_mask
+        '''
+
         self.frame_counter += 1
         return stabilized_image
 
@@ -73,7 +117,7 @@ class Video_Stabilizer():
             return None
 
         good_coords, good_next_coords = self.get_optical_flow(coords)
-        self.draw_tracks(good_coords, good_next_coords)
+        #self.draw_tracks(good_coords, good_next_coords)
         if good_coords.shape[0] < 3:
             return None
 
@@ -87,7 +131,7 @@ class Video_Stabilizer():
         mask = np.zeros_like(self.previous_frame)
         
         # FOR DEBUG PURPOSES
-        color = np.random.randint(0,255,(100,3))
+        color = np.random.randint(0,255,(200,3))
 
         for i,(new,old) in enumerate(zip(next_coords, coords)):
             a, b = new.ravel()
