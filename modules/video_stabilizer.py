@@ -109,7 +109,7 @@ class Video_Stabilizer:
             image_mask = cv2.warpAffine(image_mask, H, (self.width, self.height))
             image_mask = cv2.bitwise_not(image_mask)
 
-            stabilized_image = self.inpainting(stabilized_image, image_mask, H)
+            stabilized_frame = self.inpainting(stabilized_frame, image_mask, H)
 
         # old inpaint test
         # stabilized_image_inpainted = cv2.inpaint(self.previous_frame_rgb.astype('uint8')*255, stabilized_image_mask, 5, cv2.INPAINT_TELEA)
@@ -216,11 +216,12 @@ class Video_Stabilizer:
         https://github.com/jahaniam/Real-time-Video-Mosaic
         """
         transformed_corners = self.transformed_corners(self.previous_frame_rgb, H)
-        print(transformed_corners.shape)
+
         warped_img = self.draw_border(frame_cur, transformed_corners)
 
-        self.output_frame[frame_mask == 255] =  (self.output_frame[frame_mask == 255] + warped_img[frame_mask == 255]) / 2
+        self.output_frame[frame_mask == 255] =  (self.output_frame[frame_mask == 255] + warped_img[frame_mask == 255]) // 2
         self.output_frame[frame_mask == 0] =  warped_img[frame_mask == 0]
+
         output_temp = np.copy(self.output_frame)
         output_temp = self.draw_border(
             output_temp, transformed_corners, color=(0, 0, 255)
