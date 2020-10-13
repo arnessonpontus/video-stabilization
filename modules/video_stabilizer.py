@@ -1,15 +1,17 @@
 import numpy as np
 import cv2
+import random
 
 # params for ShiTomasi corner detection
-FEATURE_PARAMS = dict(maxCorners=200, qualityLevel=0.1, minDistance=8, blockSize=11)
+FEATURE_PARAMS = dict( maxCorners=200,
+                       qualityLevel=0.1,
+                       minDistance=8,
+                       blockSize=11 )
 
 # Parameters for lucas kanade optical flow
-LK_PARAMS = dict(
-    winSize=(21, 21),
-    maxLevel=4,
-    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03),
-)
+LK_PARAMS = dict( winSize  = (21,21),
+                  maxLevel = 4,
+                  criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 
 
 class Video_Stabilizer:
@@ -55,8 +57,12 @@ class Video_Stabilizer:
 
     def stabilize(self):
         H = self.motion_estimation(self.previous_frame, self.current_frame)
-
+        
         if H is None:
+            H = self.H_last
+
+        # Discard the extreme transforms
+        if np.abs(H[0, 2]) > 100 or np.abs(H[1, 2]) > 100:
             H = self.H_last
 
         """
@@ -81,10 +87,12 @@ class Video_Stabilizer:
         # H = np.delete(H, 2, 0)
 
         # Warp through affine matrix
-        stabilized_image = cv2.warpAffine(
-            self.previous_frame_rgb, H, (self.width, self.height)
-        )
+        stabilized_frame = cv2.warpAffine(self.previous_frame_rgb, H, (self.width, self.height))
 
+
+        # Crop and resize
+        stabilized_frame = self.crop_and_resize(stabilized_frame)
+        
         """
         self.neighbouring_frames = np.concatenate(
             (
@@ -112,9 +120,9 @@ class Video_Stabilizer:
         test[:,:,1] = stabilized_image_mask
         test[:,:,2] = stabilized_image_mask
         """
-
+        
         self.frame_counter += 1
-        return stabilized_image
+        return stabilized_frame
 
     def motion_estimation(self, previous_frame, current_frame):
         coords = cv2.goodFeaturesToTrack(previous_frame, mask=None, **FEATURE_PARAMS)
@@ -303,3 +311,19 @@ class Video_Stabilizer:
             )
         return image
 
+    def crop_and_resize(self, stabilized_frame):
+        #Croping and scaling
+        y = 80
+        x = 80
+        h = int(stabilized_frame.shape[0] * 0.8)
+        w = int(stabilized_frame.shape[1] * 0.8)
+        crop_img = stabilized_frame[y:y+h, x:x+w]
+
+        scale_percent = 220 # percent of original size
+        width = int(stabilized_frame.shape[1])
+        height = int(stabilized_frame.shape[0])
+        dim = (width, height)
+        
+        return cv2.resize(crop_img, dim, interpolation = cv2.INTER_AREA)
+
+    
