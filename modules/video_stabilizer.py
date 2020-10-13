@@ -2,12 +2,12 @@ import numpy as np
 import cv2
 
 # params for ShiTomasi corner detection
-FEATURE_PARAMS = dict(maxCorners=200, qualityLevel=0.1, minDistance=4, blockSize=7)
+FEATURE_PARAMS = dict(maxCorners=200, qualityLevel=0.1, minDistance=8, blockSize=11)
 
 # Parameters for lucas kanade optical flow
 LK_PARAMS = dict(
-    winSize=(15, 15),
-    maxLevel=2,
+    winSize=(21, 21),
+    maxLevel=4,
     criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03),
 )
 
@@ -20,7 +20,7 @@ class Video_Stabilizer:
         self.previous_frame_rgb = np.zeros((height, width, 3))
         self.current_frame = np.zeros((height, width))
         self.previous_frame = np.zeros((height, width))
-        self.output_frame = np.zeros((height, width, 3))
+        self.output_frame = self.previous_frame_rgb
         self.height = height
         self.width = width
         self.H_last = np.ones(
@@ -97,11 +97,11 @@ class Video_Stabilizer:
 
         # Testing inpainting
         if self.frame_counter > 2:
-            # image_mask = np.ones((self.height, self.width)).astype("uint8") * 255
-            # image_mask = cv2.warpAffine(image_mask, H, (self.width, self.height))
-            # image_mask = cv2.bitwise_not(image_mask)
+            image_mask = np.ones((self.height, self.width)).astype("uint8") * 255
+            image_mask = cv2.warpAffine(image_mask, H, (self.width, self.height))
+            image_mask = cv2.bitwise_not(image_mask)
 
-            stabilized_image = self.inpainting(stabilized_image, H)
+            stabilized_image = self.inpainting(stabilized_image, image_mask, H)
 
         # old inpaint test
         # stabilized_image_inpainted = cv2.inpaint(self.previous_frame_rgb.astype('uint8')*255, stabilized_image_mask, 5, cv2.INPAINT_TELEA)
@@ -202,7 +202,7 @@ class Video_Stabilizer:
 
         return H
 
-    def inpainting(self, frame_cur, H):
+    def inpainting(self, frame_cur, frame_mask, H):
         """
         Following steps by 
         https://github.com/jahaniam/Real-time-Video-Mosaic
@@ -211,7 +211,8 @@ class Video_Stabilizer:
         print(transformed_corners.shape)
         warped_img = self.draw_border(frame_cur, transformed_corners)
 
-        self.output_frame[warped_img > 0] = warped_img[warped_img > 0]
+        self.output_frame[frame_mask == 255] =  (self.output_frame[frame_mask == 255] + warped_img[frame_mask == 255]) / 2
+        self.output_frame[frame_mask == 0] =  warped_img[frame_mask == 0]
         output_temp = np.copy(self.output_frame)
         output_temp = self.draw_border(
             output_temp, transformed_corners, color=(0, 0, 255)
@@ -263,7 +264,7 @@ class Video_Stabilizer:
         # Create image with corresponding intensity for indeces
         # Repeat for ??
         """
-        return output_temp
+        return self.output_frame
 
     def transformed_corners(self, frame_cur, H):
         corner_0 = np.array([0, 0])
