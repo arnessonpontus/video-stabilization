@@ -19,6 +19,7 @@ class Video_Stabilizer:
         self.current_frame_rgb = np.zeros(
             (height, width, 3)
         )  # Change to camera dependent size?
+        self.neighbouring_frames = np.zeros((height, width, 3, 3))
         self.previous_frame_rgb = np.zeros((height, width, 3))
         self.current_frame = np.zeros((height, width))
         self.previous_frame = np.zeros((height, width))
@@ -93,20 +94,21 @@ class Video_Stabilizer:
         # Crop and resize
         stabilized_frame = self.crop_and_resize(stabilized_frame)
         
-        """
+        
         self.neighbouring_frames = np.concatenate(
             (
-                stabilized_image[:, :, :, np.newaxis],
+                stabilized_frame[:, :, :, np.newaxis],
                 self.neighbouring_frames[:, :, :, 0:-1],
             ),
             axis=3,
         )
-        """
+        
 
         # Testing inpainting
         if self.frame_counter > 2:
-            image_mask = np.ones((self.height, self.width)).astype("uint8") * 255
+            image_mask = np.ones((stabilized_frame.shape[0], stabilized_frame.shape[1])).astype("uint8") * 255
             image_mask = cv2.warpAffine(image_mask, H, (self.width, self.height))
+            image_mask = self.crop_and_resize(image_mask)
             image_mask = cv2.bitwise_not(image_mask)
 
             stabilized_frame = self.inpainting(stabilized_frame, image_mask, H)
@@ -217,62 +219,28 @@ class Video_Stabilizer:
         """
         transformed_corners = self.transformed_corners(self.previous_frame_rgb, H)
 
-        warped_img = self.draw_border(frame_cur, transformed_corners)
+        #frame_cur = self.draw_border(frame_cur, transformed_corners)
 
-        self.output_frame[frame_mask == 255] =  (self.output_frame[frame_mask == 255] + warped_img[frame_mask == 255]) // 2
-        self.output_frame[frame_mask == 0] =  warped_img[frame_mask == 0]
+        w = np.flip(np.arange(self.neighbouring_frames.shape[3]+1))
+        print(w)
+        w = np.exp(w*3)
+            
+        
+        self.output_frame[frame_mask == 255] *= w[0]
+        
+        for i in range(self.neighbouring_frames.shape[3]):
+            self.output_frame[frame_mask == 255] += self.neighbouring_frames[:,:,:,i][frame_mask == 255] * w[i+1]
+        
+        self.output_frame[frame_mask == 255] = self.output_frame[frame_mask == 255] // np.sum(w)
+
+        #self.output_frame[frame_mask == 255] = (self.output_frame[frame_mask == 255]*w2 + frame_cur[frame_mask == 255]*w1)//(w1+w2)
+        self.output_frame[frame_mask == 0] = frame_cur[frame_mask == 0]
 
         output_temp = np.copy(self.output_frame)
         output_temp = self.draw_border(
             output_temp, transformed_corners, color=(0, 0, 255)
         )
 
-        """
-        # METHOD FROM STRICT REAL TIME ARTICLE (NOT FINISHED)
-
-        mask_indices = np.argwhere(frame_mask == 255)
-        invH = np.linalg.inv(np.concatenate((H, [[0, 0, 1]])))
-
-        fx = (
-            invH[0, 0] * mask_indices[:, 0]
-            + invH[0, 1] * mask_indices[:, 1]
-            + invH[0, 2]
-        ) // (
-            invH[2, 0] * mask_indices[:, 0]
-            + invH[2, 1] * mask_indices[:, 1]
-            + invH[2, 2]
-        )
-        fy = (
-            invH[1, 0] * mask_indices[:, 0]
-            + invH[1, 1] * mask_indices[:, 1]
-            + invH[1, 2]
-        ) // (
-            invH[2, 0] * mask_indices[:, 0]
-            + invH[2, 1] * mask_indices[:, 1]
-            + invH[2, 2]
-        )
-
-        # n = dv = fc1 = fc2 = 0
-        hImg = self.neighbouring_frames[:, :, :, 1]
-
-        for i in range(mask_indices.shape[0]):
-            test = cv2.borderInterpolate(fy, hImg.shape[0], cv2.BORDER_REFLECT)
-            frame[mask_indices[i, :]] = hImg[
-                cv2.borderInterpolate(fy, hImg.shape[0], cv2.BORDER_REFLECT),
-                cv2.borderInterpolate(fx, hImg.shape[1], cv2.BORDER_REFLECT),
-            ]
-
-        # for i in range(2):
-        # Ht = self.motion_estimation(self.neighbouring_frames[:, :, :, 1], frame)
-        # w = np.exp(1-(3-i))
-
-        # TODO:
-        # Create index array where mask is white [[x, y, z=1], ...]
-        # Multiply with transform matrix from frame t-2 -> t => new index values
-        # Get new index values
-        # Create image with corresponding intensity for indeces
-        # Repeat for ??
-        """
         return self.output_frame
 
     def transformed_corners(self, frame_cur, H):
