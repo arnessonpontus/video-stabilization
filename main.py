@@ -20,7 +20,6 @@ if __name__ == "__main__":
     else:  # From webcam
         print("Reading from webcam")
         cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_EXPOSURE, 40) # Set exposure time of camera
         # Check if the webcam is opened correctly
         if not cap.isOpened():
             raise IOError("Cannot open webcam")
@@ -41,7 +40,7 @@ while True:
     if current_frame is None:
         break
 
-    ### Stabilize here ###
+    # Stabilization
     stabilizer.add_frames(previous_frame, current_frame)
     stabilized_frame = stabilizer.stabilize()
 
@@ -49,7 +48,7 @@ while True:
         current_frame = current_frame.astype("uint8")
         stabilized_frame = stabilized_frame.astype("uint8")
         
-        # Combine
+        # Combine to one image
         frame_out = cv2.hconcat([current_frame, stabilized_frame])
         
         if (frame_out.shape[1] is not 1920):

@@ -16,9 +16,7 @@ LK_PARAMS = dict( winSize  = (21,21),
 
 class Video_Stabilizer:
     def __init__(self, height, width):
-        self.current_frame_rgb = np.zeros(
-            (height, width, 3)
-        )  # Change to camera dependent size?
+        self.current_frame_rgb = np.zeros((height, width, 3)) 
         self.neighbouring_frames = np.zeros((height, width, 3, 3))
         self.previous_frame_rgb = np.zeros((height, width, 3))
         self.current_frame = np.zeros((height, width))
@@ -26,9 +24,7 @@ class Video_Stabilizer:
         self.output_frame = self.previous_frame_rgb
         self.height = height
         self.width = width
-        self.H_last = np.ones(
-            (2, 3)
-        )  # Previous transform in case current frame does not have one
+        self.H_last = np.ones((2, 3))  # Previous transform in case current frame does not have one
         self.frame_counter = 0
         # -------------- Accumulated frame-to-frame transforms ----------
         self.x = 0
@@ -49,12 +45,10 @@ class Video_Stabilizer:
     def add_frames(self, previous_frame, current_frame):
         self.current_frame_rgb = current_frame
         self.previous_frame_rgb = previous_frame
-        self.current_frame = cv2.cvtColor(
-            current_frame.astype(np.uint8), cv2.COLOR_BGR2GRAY
-        )
-        self.previous_frame = cv2.cvtColor(
-            previous_frame.astype(np.uint8), cv2.COLOR_BGR2GRAY
-        )
+
+        # Convert to grayscale
+        self.current_frame = cv2.cvtColor(current_frame.astype(np.uint8), cv2.COLOR_BGR2GRAY)
+        self.previous_frame = cv2.cvtColor(previous_frame.astype(np.uint8), cv2.COLOR_BGR2GRAY)
 
     def stabilize(self):
         H = self.motion_estimation(self.previous_frame, self.current_frame)
@@ -62,38 +56,20 @@ class Video_Stabilizer:
         if H is None:
             H = self.H_last
 
-        # Discard the extreme transforms
+        # Discard the extreme translations
         if np.abs(H[0, 2]) > 100 or np.abs(H[1, 2]) > 100:
             H = self.H_last
-
-        """
-        dx = H[0, 2]
-        dy = H[1 ,2]
-        da = np.arctan2(H[1,0], H[0,0])
-
-        if np.abs(da) > 0.5:
-            H = self.H_last
-
-        print(dx, dy, da)
-        """
 
         self.H_last = H
 
         # Motion filtering
         H = self.motion_filter(H)
 
-        # Inverse of H
-        # H = np.concatenate((self.H_cummulative, np.array([[0, 0, 1]])))
-        # H = np.linalg.inv(H)
-        # H = np.delete(H, 2, 0)
-
         # Warp through affine matrix
         stabilized_frame = cv2.warpAffine(self.previous_frame_rgb, H, (self.width, self.height))
 
-
         # Crop and resize
-        stabilized_frame = self.crop_and_resize(stabilized_frame)
-        
+        #stabilized_frame = self.crop_and_resize(stabilized_frame)
         
         self.neighbouring_frames = np.concatenate(
             (
@@ -103,25 +79,14 @@ class Video_Stabilizer:
             axis=3,
         )
         
-
         # Testing inpainting
         if self.frame_counter > 2:
             image_mask = np.ones((stabilized_frame.shape[0], stabilized_frame.shape[1])).astype("uint8") * 255
             image_mask = cv2.warpAffine(image_mask, H, (self.width, self.height))
-            image_mask = self.crop_and_resize(image_mask)
+            #image_mask = self.crop_and_resize(image_mask)
             image_mask = cv2.bitwise_not(image_mask)
 
             stabilized_frame = self.inpainting(stabilized_frame, image_mask, H)
-
-        # old inpaint test
-        # stabilized_image_inpainted = cv2.inpaint(self.previous_frame_rgb.astype('uint8')*255, stabilized_image_mask, 5, cv2.INPAINT_TELEA)
-        # stabilized_image_inpainted = cv2.bitwise_not(stabilized_image_inpainted)
-        """
-        test = np.zeros((self.height, self.width, 3))
-        test[:,:,0] = stabilized_image_mask
-        test[:,:,1] = stabilized_image_mask
-        test[:,:,2] = stabilized_image_mask
-        """
         
         self.frame_counter += 1
         return stabilized_frame
@@ -133,7 +98,10 @@ class Video_Stabilizer:
             return None
 
         good_coords, good_next_coords = self.get_optical_flow(coords)
+
+        # Draw corners and optical flow
         # self.draw_tracks(good_coords, good_next_coords)
+
         if good_coords.shape[0] < 3:
             return None
 
@@ -146,7 +114,6 @@ class Video_Stabilizer:
     def draw_tracks(self, coords, next_coords, draw_lines=True):
         mask = np.zeros_like(self.previous_frame)
 
-        # FOR DEBUG PURPOSES
         color = np.random.randint(0, 255, (200, 3))
 
         for i, (new, old) in enumerate(zip(next_coords, coords)):
@@ -180,7 +147,6 @@ class Video_Stabilizer:
         self.z = np.array((self.x, self.y, self.a))
 
         if self.frame_counter > 0:
-
             #  -------------  KALMAN  -----------------
             # Prediction
             self.X_ = self.X
@@ -213,18 +179,11 @@ class Video_Stabilizer:
         return H
 
     def inpainting(self, frame_cur, frame_mask, H):
-        """
-        Following steps by 
-        https://github.com/jahaniam/Real-time-Video-Mosaic
-        """
         transformed_corners = self.transformed_corners(self.previous_frame_rgb, H)
 
-        #frame_cur = self.draw_border(frame_cur, transformed_corners)
-
+        # Get weights for the frames
         w = np.flip(np.arange(self.neighbouring_frames.shape[3]+1))
-        print(w)
         w = np.exp(w*3)
-            
         
         self.output_frame[frame_mask == 255] *= w[0]
         
@@ -233,16 +192,47 @@ class Video_Stabilizer:
         
         self.output_frame[frame_mask == 255] = self.output_frame[frame_mask == 255] // np.sum(w)
 
-        #self.output_frame[frame_mask == 255] = (self.output_frame[frame_mask == 255]*w2 + frame_cur[frame_mask == 255]*w1)//(w1+w2)
+        """
+        # Vectorizing in progress (does not work yet)
+        neighbouring_frames_weighted = self.neighbouring_frames
+        neighbouring_frames_weighted[frame_mask == 255] *= w[1:]
+
+        self.output_frame[frame_mask == 255] = np.sum(
+            neighbouring_frames_weighted, axis=3
+        )[frame_mask == 255]
+        """
+
         self.output_frame[frame_mask == 0] = frame_cur[frame_mask == 0]
 
+        # For visualizing border
+        output_temp = None
+        """
         output_temp = np.copy(self.output_frame)
-        output_temp = self.draw_border(
-            output_temp, transformed_corners, color=(0, 0, 255)
-        )
+        transformed_corners = self.transformed_corners(output_temp, H)
+        output_temp = self.draw_border(output_temp, transformed_corners, color=(0, 0, 255))
+        """
 
-        return self.output_frame
+        return output_temp if output_temp is not None else self.output_frame
+        
+    def crop_and_resize(self, stabilized_frame):
+        y = 80
+        x = 80
+        h = int(stabilized_frame.shape[0] * 0.8)
+        w = int(stabilized_frame.shape[1] * 0.8)
+        crop_img = stabilized_frame[y:y+h, x:x+w]
 
+        width = int(stabilized_frame.shape[1])
+        height = int(stabilized_frame.shape[0])
+        dim = (width, height)
+        
+        return cv2.resize(crop_img, dim, interpolation = cv2.INTER_AREA)
+
+    """
+    AUXILIARY FUNCTIONS TAKEN FROM
+    https://github.com/jahaniam/Real-time-Video-Mosaic
+    """
+    
+    # Finds the corner of the current frame after warp
     def transformed_corners(self, frame_cur, H):
         corner_0 = np.array([0, 0])
         corner_1 = np.array([frame_cur.shape[1], 0])
@@ -252,7 +242,6 @@ class Video_Stabilizer:
         corners = np.array([[corner_0, corner_1, corner_2, corner_3]], dtype=np.float32)
         H = np.concatenate((H, [[0, 0, 1]]))
 
-        # transformed_corners = cv2.warpAffine(corners, H, (self.width, self.height))
         transformed_corners = cv2.perspectiveTransform(corners, H)
 
         transformed_corners = np.array(transformed_corners, dtype=np.int32)
@@ -260,16 +249,6 @@ class Video_Stabilizer:
         return transformed_corners
 
     def draw_border(self, image, corners, color=(0, 0, 0)):
-        """This functions draw rectancle border
-
-        Args:
-            image ([type]): current mosaiced output
-            corners (np array): list of corner points
-            color (tuple, optional): color of the border lines. Defaults to (0, 0, 0).
-
-        Returns:
-            np array: the output image with border
-        """
         for i in range(corners.shape[1] - 1, -1, -1):
             cv2.line(
                 image,
@@ -279,20 +258,3 @@ class Video_Stabilizer:
                 color=color,
             )
         return image
-
-    def crop_and_resize(self, stabilized_frame):
-        #Croping and scaling
-        y = 80
-        x = 80
-        h = int(stabilized_frame.shape[0] * 0.8)
-        w = int(stabilized_frame.shape[1] * 0.8)
-        crop_img = stabilized_frame[y:y+h, x:x+w]
-
-        scale_percent = 220 # percent of original size
-        width = int(stabilized_frame.shape[1])
-        height = int(stabilized_frame.shape[0])
-        dim = (width, height)
-        
-        return cv2.resize(crop_img, dim, interpolation = cv2.INTER_AREA)
-
-    
